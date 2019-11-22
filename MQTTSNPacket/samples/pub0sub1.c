@@ -25,7 +25,50 @@
 
 #include "MQTTSNPacket.h"
 #include "transport.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
+struct opts_struct
+{
+	char* clientid;
+	int   qos;
+	char* host;
+	int   server_port;
+	int   client_port;
+};
+
+struct opts_struct opts = {(char*)"testClient", 1, "161.253.74.249", 1885};
+
+void getopts(int argc, char** argv)
+{
+	int count = 1;
+
+	while (count < argc) {
+		if (strcmp(argv[count], "--host") == 0) {
+			if (++count < argc)
+				opts.host = argv[count];
+		}
+		else if (strcmp(argv[count], "--clientid") == 0) {
+			if (++count < argc)
+				opts.clientid = argv[count];
+		}
+		else if (strcmp(argv[count], "--server_port") == 0) {
+			if (++count < argc)
+				opts.server_port = atoi(argv[count]);
+		}
+		else if (strcmp(argv[count], "--client_port") == 0) {
+			if (++count < argc)
+				opts.client_port = atoi(argv[count]);
+		}
+		else if (strcmp(argv[count], "--qos") == 0) {
+			if (++count < argc)
+				opts.qos = atoi(argv[count]);
+		}
+		count ++;
+	}
+}
 
 int main(int argc, char** argv)
 {
@@ -34,32 +77,47 @@ int main(int argc, char** argv)
 	unsigned char buf[200];
 	int buflen = sizeof(buf);
 	MQTTSN_topicid topic;
+	struct sockaddr_in clientaddr;
+
 	unsigned char* payload = (unsigned char*)"mypayload";
 	int payloadlen = strlen((char*)payload);
 	int len = 0;
 	unsigned char dup = 0;
-	int qos = 1;
+	//int qos = 1;
 	unsigned char retained = 0;
 	short packetid = 1;
 	char *topicname = "a long topic name";
-	char *host = "127.0.0.1";
-	int port = 1883;
+	//char *host = "127.0.0.1";
+	//int port = 1883;
 	MQTTSNPacket_connectData options = MQTTSNPacket_connectData_initializer;
 	unsigned short topicid;
+
+	if (argc > 1)
+		getopts(argc, argv);
+
+	int port = opts.server_port;
+	char *host = opts.host;
+	int qos = opts.qos;
 
 	mysock = transport_open();
 	if(mysock < 0)
 		return mysock;
 
-	if (argc > 1)
-		host = argv[1];
+	memset(&clientaddr, 0, sizeof(struct sockaddr_in));
 
-	if (argc > 2)
-		port = atoi(argv[2]);
+	clientaddr.sin_family = AF_INET;
+	clientaddr.sin_addr.s_addr = INADDR_ANY;
+	clientaddr.sin_port = htons(opts.client_port);
+
+	if ((rc = bind(mysock, (struct sockaddr *)&clientaddr, sizeof(struct sockaddr_in))) < 0) {
+		perror("bind");
+	}
 
 	printf("Sending to hostname %s port %d\n", host, port);
 
-	options.clientID.cstring = "pub0sub1 MQTT-SN";
+	//options.clientID.cstring = "pub0sub1 MQTT-SN";
+	options.clientID.cstring = opts.clientid;
+
 	len = MQTTSNSerialize_connect(buf, buflen, &options);
 	rc = transport_sendPacketBuffer(host, port, buf, len);
 
