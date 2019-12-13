@@ -39,7 +39,7 @@ struct opts_struct
 	int   client_port;
 };
 
-struct opts_struct opts = {(char*)"testClient", 1, "161.253.74.249", 1885};
+struct opts_struct opts = {(char*)"testClient", 1, "10.10.1.2", 443};
 
 void getopts(int argc, char** argv)
 {
@@ -79,7 +79,7 @@ int main(int argc, char** argv)
 	MQTTSN_topicid topic;
 	struct sockaddr_in clientaddr;
 
-	unsigned char* payload = (unsigned char*)"mypayload";
+	unsigned char* payload = (unsigned char*)"XXXXXXXXXXXXXXXX";
 	int payloadlen = strlen((char*)payload);
 	int len = 0;
 	unsigned char dup = 0;

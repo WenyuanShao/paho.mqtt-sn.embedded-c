@@ -29,6 +29,7 @@
 int main(int argc, char** argv)
 {
 	int rc = 0;
+	int ret = 0;
 	int mysock;
 	unsigned char buf[200];
 	int buflen = sizeof(buf);
@@ -62,7 +63,8 @@ int main(int argc, char** argv)
 	rc = transport_sendPacketBuffer(host, port, buf, len);
 
 	/* wait for connack */
-	if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_CONNACK)
+	ret = MQTTSNPacket_read(buf, buflen, transport_getdata);
+	if (ret == MQTTSN_CONNACK)
 	{
 		int connack_rc = -1;
 
@@ -75,7 +77,10 @@ int main(int argc, char** argv)
 			printf("connected rc %d\n", connack_rc);
 	}
 	else
+	{
+		printf("ERROR on packet read: %d", ret);
 		goto exit;
+	}
 
 	 
 	/* publish with short name */
