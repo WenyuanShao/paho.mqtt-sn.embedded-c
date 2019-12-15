@@ -5,7 +5,6 @@ import time
 cur_core = 0
 nb_cores = 1
 server = "127.0.0.1"
-clientid = "kkkkkkkkkk000000"
 server_port = "1885"
 
 class client(object):
@@ -16,7 +15,7 @@ class client(object):
         self.args.extend(["-c", str(core)])
         self.args.extend(["./pub0sub1"])
         self.args.extend(["--host", server])
-        self.args.extend(["--clientid", clientid])
+        self.args.extend(["--clientid", "kkkkkkkkkk0{}".format(str(client_port))])
         self.args.extend(["--server_port", server_port])
         self.args.extend(["--client_port", str(client_port)])
         self.args.extend(["--qos", "1"])
@@ -76,9 +75,9 @@ def increment_core_num(core):
     cur_core = (cur_core + 1) % nb_cores
     return p
 
-def start_clients(pubnum, client_port, rate):
+def start_clients(client_num, client_port, rate, pubnum):
     client_list=[]
-    for _ in range(pubnum):
+    for _ in range(client_num):
         nc = increment_core_num(0)
         client_list.append(client(nc, client_port, rate, pubnum))
         """
@@ -95,6 +94,7 @@ def parse_args():
     parser.add_argument("--rate", help="rate limit", type=int)
     parser.add_argument("--pubnum", help="number of publishes to make", type=int)
     parser.add_argument("--nb_cores", help="number of cores", type=int)
+    parser.add_argument("--client_num", help="number of clients", type=int)
     return parser.parse_args()
 
 if __name__ == '__main__':
@@ -106,8 +106,9 @@ if __name__ == '__main__':
     rate = args.rate if args.rate else 500
     pubnum = args.pubnum if args.pubnum else 1
     nb_cores = args.nb_cores if args.nb_cores else 1
+    client_num = args.client_num if args.client_num else 1
 
-    client_list = start_clients(pubnum, client_port, rate)
+    client_list = start_clients(client_num, client_port, rate, pubnum)
 
     #time.sleep(60)
     #total_result = 0
