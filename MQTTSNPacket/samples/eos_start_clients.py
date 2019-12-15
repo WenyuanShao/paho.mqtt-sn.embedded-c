@@ -22,7 +22,7 @@ class client(object):
         self.args.extend(["--rate", str(rate)])
         self.args.extend(["--pubnum", str(pubnum)])
         if (client_port % 2 == 1):
-            self.args.extend(["--listener"])
+            self.args.extend(["--publisher"])
 
         self.log_file_path, log_file = self.create_log()
         print self.args
