@@ -161,6 +161,43 @@ void write2file(char* filename, unsigned long long *res_array)
 
 }
 
+void read_publish(int qos, char* host, int port)
+{
+	unsigned short packet_id;
+	int payloadlen;
+	unsigned char* payload;
+	unsigned char dup, retained;
+	MQTTSN_topicid pubtopic;
+	unsigned char buf[200];
+	int buflen = sizeof(buf);
+	int len;
+
+	if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBLISH)
+	{
+		MQTTSNDeserialize_publish(&dup, &qos, &retained, &packet_id, &pubtopic, &payload, &payloadlen, buf, buflen);
+
+		if (MQTTSNDeserialize_publish(&dup, &qos, &retained, &packet_id, &pubtopic,
+				&payload, &payloadlen, buf, buflen) != 1)
+			printf("Error deserializing publish\n");
+		//else 
+		//	printf("publish received, id %d qos %d\n", packet_id, qos);
+
+		if (qos == 1)
+		{
+			len = MQTTSNSerialize_puback(buf, buflen, pubtopic.data.id, packet_id, MQTTSN_RC_ACCEPTED);
+			rc = transport_sendPacketBuffer(host, port, buf, len);
+			//if (rc == 0)
+				//printf("puback sent\n");
+		}
+		end = ps_tsc();
+		assert(start > 0);
+		res_array[cnt] = end - start;
+		cnt ++;
+		//printf("cnt: %d, num_pub_req: %d\n", cnt, num_pub_req);
+	}
+	return;
+}
+
 int main(int argc, char** argv)
 {
 	int rc = 0;
@@ -277,7 +314,7 @@ int main(int argc, char** argv)
 			rc = transport_sendPacketBuffer(host, port, buf, len);
 
 			/* wait for puback */
-			if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBACK)
+			/*if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBACK)
 			{
 				unsigned short packet_id, topic_id;
 				unsigned char returncode;
@@ -291,11 +328,12 @@ int main(int argc, char** argv)
 			}
 			else
 				goto exit;
-
+			*/
 			//printf("Receive publish\n");
 			start = ps_tsc();
 		}
-		if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBLISH)
+		read_publish(qos, host, port);
+		/*if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBLISH)
 		{
 			unsigned short packet_id;
 			int payloadlen;
@@ -325,42 +363,8 @@ int main(int argc, char** argv)
 			//printf("cnt: %d, num_pub_req: %d\n", cnt, num_pub_req);
 		}
 		else
-			goto exit;
+			goto exit;*/
 	} while (cnt < num_pub_req);
-	/*} else {
-		while (cnt < num_pub_req)
-		{
-			if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBLISH)
-			{
-				unsigned short packet_id;
-				int qos, payloadlen;
-				unsigned char* payload;
-				unsigned char dup, retained;
-				MQTTSN_topicid pubtopic;
-
-				MQTTSNDeserialize_publish(&dup, &qos, &retained, &packet_id, &pubtopic, &payload, &payloadlen, buf, buflen);
-
-				//if (MQTTSNDeserialize_publish(&dup, &qos, &retained, &packet_id, &pubtopic,
-				//		&payload, &payloadlen, buf, buflen) != 1)
-				//	printf("Error deserializing publish\n");
-				//else
-				//	printf("publish received, id %d qos %d\n", packet_id, qos);
-
-				if (qos == 1)
-				{
-					len = MQTTSNSerialize_puback(buf, buflen, pubtopic.data.id, packet_id, MQTTSN_RC_ACCEPTED);
-					rc = transport_sendPacketBuffer(host, port, buf, len);
-					//if (rc == 0)
-						//printf("puback sent\n");
-				}
-				end = ps_tsc();
-				res_array[cnt] = end - start;
-				cnt ++;
-			}
-			else
-				goto exit;
-		}
-	}*/
 	
 	printf("NUM_RECVED\n", cnt);
 	len = MQTTSNSerialize_disconnect(buf, buflen, 0);
