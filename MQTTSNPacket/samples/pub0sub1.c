@@ -30,14 +30,14 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <assert.h>
+#include <fcntl.h>
 
 #define CPU_FREQ 2700
 
 struct quantum {
 	unsigned long long last;
-	unsigned long long limit;
-	unsigned long long start;
 	unsigned long long size;
+	unsigned long long curr;
 };
 
 struct quantum global_limitor;
@@ -58,21 +58,22 @@ ps_tsc(void)
 static void
 quantum_init(struct quantum *q, unsigned long limit)
 {
-	memset(q, 0, sizeof(struct quantum));
-	q->limit = limit;
-	if (limit > 0) {
-		q->size = 1000000 / limit * CPU_FREQ;
+	q->curr = q->last = 0;
+	if (limit == 0) {
+		q->size = limit;
+	} else {
+		q->size = (unsigned long long)CPU_FREQ * 1000000 / limit;
 	}
 }
 
-static void
+/*static void
 quantum_start(struct quantum *q)
 {
 	q->last  = 1;
 	q->start = ps_tsc();
-}
+}*/
 
-static void
+/*static int
 quantum_wait(struct quantum *q)
 {
 	unsigned long long cur;
@@ -84,7 +85,7 @@ quantum_wait(struct quantum *q)
 		num = (cur - q->start) / q->size;
 	} while (q->last >= num);
 	q->last++;
-}
+}*/
 
 struct opts_struct
 {
@@ -170,7 +171,7 @@ void read_publish(int qos, char* host, int port)
 	MQTTSN_topicid pubtopic;
 	unsigned char buf[200];
 	int buflen = sizeof(buf);
-	int len;
+	int len, rc;
 
 	if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBLISH)
 	{
@@ -179,20 +180,21 @@ void read_publish(int qos, char* host, int port)
 		if (MQTTSNDeserialize_publish(&dup, &qos, &retained, &packet_id, &pubtopic,
 				&payload, &payloadlen, buf, buflen) != 1)
 			printf("Error deserializing publish\n");
-		//else 
-		//	printf("publish received, id %d qos %d\n", packet_id, qos);
+		else 
+			printf("publish received, id %d qos %d\n", packet_id, qos);
 
 		if (qos == 1)
 		{
 			len = MQTTSNSerialize_puback(buf, buflen, pubtopic.data.id, packet_id, MQTTSN_RC_ACCEPTED);
 			rc = transport_sendPacketBuffer(host, port, buf, len);
+			assert(rc!=0);
 			//if (rc == 0)
 				//printf("puback sent\n");
 		}
-		end = ps_tsc();
-		assert(start > 0);
-		res_array[cnt] = end - start;
-		cnt ++;
+		//end = ps_tsc();
+		//assert(start > 0);
+		//res_array[cnt] = end - start;
+		//cnt ++;
 		//printf("cnt: %d, num_pub_req: %d\n", cnt, num_pub_req);
 	}
 	return;
@@ -206,7 +208,6 @@ int main(int argc, char** argv)
 	int buflen = sizeof(buf);
 	MQTTSN_topicid topic;
 	struct sockaddr_in clientaddr;
-	quantum_init(&global_limitor, send_rate_limit);
 
 	unsigned char* payload = (unsigned char*)"XXXXXXXXXXXXXXXX";
 	int payloadlen = strlen((char*)payload);
@@ -222,7 +223,9 @@ int main(int argc, char** argv)
 	MQTTSNPacket_connectData options = MQTTSNPacket_connectData_initializer;
 	unsigned short topicid;
 	int cnt = 0;
-	unsigned long long start = 0, end;
+	unsigned long long tstart;
+	//unsigned long long start = 0, end;
+
 	if (argc > 1)
 		getopts(argc, argv);
 
@@ -233,8 +236,10 @@ int main(int argc, char** argv)
 	res_array = malloc(sizeof(unsigned long long) * num_pub_req);
 
 	mysock = transport_open();
-	if(mysock < 0)
-		return mysock;
+	if(mysock < 0) {
+		perror("socket allocate failed");
+		exit(-1);
+	}
 
 	memset(&clientaddr, 0, sizeof(struct sockaddr_in));
 
@@ -299,19 +304,29 @@ int main(int argc, char** argv)
 		goto exit;
 
 	//printf("Publishing\n");
-	quantum_start(&global_limitor);
-	start = ps_tsc();
+	fcntl(mysock, F_SETFL, O_NONBLOCK);
+	tstart = ps_tsc();
+	quantum_init(&global_limitor, send_rate_limit);
+	//quantum_start(&global_limitor);
+	//start = ps_tsc();
 	/* publish with short name */
 	do {
 		if(publisher == 1) {
-			quantum_wait(&global_limitor);
-			topic.type = MQTTSN_TOPIC_TYPE_NORMAL;
-			topic.data.id = topicid;
-			++packetid;
-			printf("qos: %d\n, qos");
-			len = MQTTSNSerialize_publish(buf, buflen, dup, qos, retained, packetid,
-					topic, payload, payloadlen);
-			rc = transport_sendPacketBuffer(host, port, buf, len);
+			if (global_limitor.size > 0) {
+				global_limitor.curr = (ps_tsc() - tstart)/global_limitor.size;
+				if (global_limitor.last < global_limitor.curr) {
+					topic.type = MQTTSN_TOPIC_TYPE_NORMAL;
+					topic.data.id = topicid;
+					++packetid;
+					len = MQTTSNSerialize_publish(buf, buflen, dup, qos, retained, packetid,
+							topic, payload, payloadlen);
+					rc = transport_sendPacketBuffer(host, port, buf, len);
+					if (rc == 0)
+						global_limitor.last++;
+					cnt++;
+				}
+			}
+			read_publish(qos, host, port);
 
 			/* wait for puback */
 			/*if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBACK)
@@ -330,9 +345,8 @@ int main(int argc, char** argv)
 				goto exit;
 			*/
 			//printf("Receive publish\n");
-			start = ps_tsc();
+			//start = ps_tsc();
 		}
-		read_publish(qos, host, port);
 		/*if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBLISH)
 		{
 			unsigned short packet_id;
@@ -366,16 +380,13 @@ int main(int argc, char** argv)
 			goto exit;*/
 	} while (cnt < num_pub_req);
 	
-	printf("NUM_RECVED\n", cnt);
+	printf("NUM_RECVED: %d\n", cnt);
 	len = MQTTSNSerialize_disconnect(buf, buflen, 0);
 	rc = transport_sendPacketBuffer(host, port, buf, len);
 
 	MQTTSNPacket_read(buf, buflen, transport_getdata);
 exit:
 	transport_close();
-	if (publisher) {
-		write2file(filename, res_array);
-	}
 
 	return 0;
 }
