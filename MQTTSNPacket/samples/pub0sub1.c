@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <assert.h>
 
 #define CPU_FREQ 2700
 
@@ -138,7 +139,6 @@ void getopts(int argc, char** argv)
 				num_pub_req = atoi(argv[count]);
 		}
 		else if (strcmp(argv[count], "--publisher") == 0) {
-			printf("publisher????: %d, %d\n", count, argc);
 			publisher = 1;
 		}
 		count ++;
@@ -148,16 +148,15 @@ void getopts(int argc, char** argv)
 void write2file(char* filename, unsigned long long *res_array)
 {
 	int i = 0;
-	char buf[100];
+//	char buf[100];
 
 //	FILE *fp = fopen(filename, "w");
 //	getcwd(buf, 100);
 //	printf("filename: %s, pwd: %s\n", filename, buf);
 	for (i = 0; i < num_pub_req; i++) {
 //		fprintf(fp, "%ld,", res_array[i]);
-		printf("%ld, ", res_array[i]);
+		printf("%llu\n", res_array[i]);
 	}
-	printf("\n");
 //	fclose(fp);
 
 }
@@ -186,7 +185,7 @@ int main(int argc, char** argv)
 	MQTTSNPacket_connectData options = MQTTSNPacket_connectData_initializer;
 	unsigned short topicid;
 	int cnt = 0;
-	unsigned long long start, end;
+	unsigned long long start = 0, end;
 	if (argc > 1)
 		getopts(argc, argv);
 
@@ -203,10 +202,11 @@ int main(int argc, char** argv)
 	memset(&clientaddr, 0, sizeof(struct sockaddr_in));
 
 	clientaddr.sin_family = AF_INET;
-	clientaddr.sin_addr.s_addr = INADDR_ANY;
+	clientaddr.sin_addr.s_addr = inet_addr("10.10.1.1");
 	clientaddr.sin_port = htons(opts.client_port);
 
 	sprintf(filename, "./logs/res_%d", opts.client_port);
+	printf("port: %d\n", opts.client_port);
 
 	if ((rc = bind(mysock, (struct sockaddr *)&clientaddr, sizeof(struct sockaddr_in))) < 0) {
 		perror("bind");
@@ -236,9 +236,7 @@ int main(int argc, char** argv)
 	else
 		goto exit;
 
-
 	/* subscribe */
-	printf("Subscribing\n");
 	topic.type = MQTTSN_TOPIC_TYPE_NORMAL;
 	topic.data.long_.name = topicname;
 	topic.data.long_.len = strlen(topic.data.long_.name);
@@ -265,6 +263,7 @@ int main(int argc, char** argv)
 
 	//printf("Publishing\n");
 	quantum_start(&global_limitor);
+	start = ps_tsc();
 	/* publish with short name */
 	do {
 		if(publisher == 1) {
@@ -272,6 +271,7 @@ int main(int argc, char** argv)
 			topic.type = MQTTSN_TOPIC_TYPE_NORMAL;
 			topic.data.id = topicid;
 			++packetid;
+			printf("qos: %d\n, qos");
 			len = MQTTSNSerialize_publish(buf, buflen, dup, qos, retained, packetid,
 					topic, payload, payloadlen);
 			rc = transport_sendPacketBuffer(host, port, buf, len);
@@ -298,7 +298,7 @@ int main(int argc, char** argv)
 		if (MQTTSNPacket_read(buf, buflen, transport_getdata) == MQTTSN_PUBLISH)
 		{
 			unsigned short packet_id;
-			int qos, payloadlen;
+			int payloadlen;
 			unsigned char* payload;
 			unsigned char dup, retained;
 			MQTTSN_topicid pubtopic;
@@ -308,8 +308,8 @@ int main(int argc, char** argv)
 			if (MQTTSNDeserialize_publish(&dup, &qos, &retained, &packet_id, &pubtopic,
 					&payload, &payloadlen, buf, buflen) != 1)
 				printf("Error deserializing publish\n");
-			else 
-				printf("publish received, id %d qos %d\n", packet_id, qos);
+			//else 
+			//	printf("publish received, id %d qos %d\n", packet_id, qos);
 
 			if (qos == 1)
 			{
@@ -319,8 +319,10 @@ int main(int argc, char** argv)
 					//printf("puback sent\n");
 			}
 			end = ps_tsc();
+			assert(start > 0);
 			res_array[cnt] = end - start;
 			cnt ++;
+			//printf("cnt: %d, num_pub_req: %d\n", cnt, num_pub_req);
 		}
 		else
 			goto exit;
@@ -360,7 +362,7 @@ int main(int argc, char** argv)
 		}
 	}*/
 	
-	printf("publish request success: %d, Error: %d\n", cnt, num_pub_req-cnt);
+	printf("NUM_RECVED\n", cnt);
 	len = MQTTSNSerialize_disconnect(buf, buflen, 0);
 	rc = transport_sendPacketBuffer(host, port, buf, len);
 
