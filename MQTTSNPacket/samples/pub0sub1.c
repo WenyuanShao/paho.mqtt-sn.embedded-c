@@ -34,7 +34,7 @@
 #include <signal.h>
 #include <unistd.h>
 
-#define CPU_FREQ 2700
+#define CPU_FREQ 2900
 
 struct quantum {
 	unsigned long long last;
@@ -73,27 +73,6 @@ quantum_init(struct quantum *q, unsigned long limit)
 		q->size = (unsigned long long)CPU_FREQ * 1000000 / limit;
 	}
 }
-
-/*static void
-quantum_start(struct quantum *q)
-{
-	q->last  = 1;
-	q->start = ps_tsc();
-}*/
-
-/*static int
-quantum_wait(struct quantum *q)
-{
-	unsigned long long cur;
-	int num;
-
-	if(q->limit == 0) return;
-	do {
-		cur = ps_tsc();
-		num = (cur - q->start) / q->size;
-	} while (q->last >= num);
-	q->last++;
-}*/
 
 struct opts_struct
 {
@@ -159,7 +138,7 @@ void print_res(struct res *res)
 	int i = 0;
 	for (i = 0; i < num_pub_req; i++) {
 		if (res[i].l != 0)
-			printf("%llu\n", res[i].l);
+			printf("%llu\n", res[i].l/CPU_FREQ);
 	}
 }
 
@@ -181,12 +160,6 @@ void read_publish(int qos, char* host, int port, struct res* res)
 				&payload, &payloadlen, buf, buflen);
 		assert(rc == 1);
 
-		/*if (MQTTSNDeserialize_publish(&dup, &qos, &retained, &packet_id, &pubtopic,
-				&payload, &payloadlen, buf, buflen) != 1)
-			printf("Error deserializing publish\n");
-		else 
-			printf("publish received, id %d qos %d\n", packet_id, qos);
-		*/
 		res[packet_id].l = ps_tsc()-res[packet_id].s;
 
 		if (qos == 1)
@@ -194,14 +167,7 @@ void read_publish(int qos, char* host, int port, struct res* res)
 			len = MQTTSNSerialize_puback(buf, buflen, pubtopic.data.id, packet_id, MQTTSN_RC_ACCEPTED);
 			rc = transport_sendPacketBuffer(host, port, buf, len);
 			assert(rc!=0);
-			//if (rc == 0)
-				//printf("puback sent\n");
 		}
-		//end = ps_tsc();
-		//assert(start > 0);
-		//res_array[cnt] = end - start;
-		//cnt ++;
-		//printf("cnt: %d, num_pub_req: %d\n", cnt, num_pub_req);
 	}
 	return;
 }
@@ -286,13 +252,11 @@ int main(int argc, char** argv)
 		if (MQTTSNDeserialize_connack(&connack_rc, buf, buflen) != 1 || connack_rc != 0)
 		{
 			//printf("Unable to connect, return code %d\n", connack_rc);
-			goto exit;
+			assert(0);
 		}
-		//else 
-			//printf("connected rc %d\n", connack_rc);
 	}
 	else
-		goto exit;
+		assert(0);
 
 	/* subscribe */
 	topic.type = MQTTSN_TOPIC_TYPE_NORMAL;
@@ -310,6 +274,7 @@ int main(int argc, char** argv)
 		rc = MQTTSNDeserialize_suback(&granted_qos, &topicid, &submsgid, &returncode, buf, buflen);
 		if (granted_qos != 2 || returncode != 0)
 		{
+			assert(0);
 			printf("granted qos != 2, %d return code %d\n", granted_qos, returncode);
 			goto exit;
 		}

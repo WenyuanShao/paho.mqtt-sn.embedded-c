@@ -4,8 +4,8 @@ import time
 
 cur_core = 0
 nb_cores = 1
-server = "127.0.0.1"
-server_port = "1885"
+server = "10.10.1.2"
+server_port = "11211"
 
 class client(object):
     def __init__(self, core, client_port, rate, pubnum):
@@ -18,7 +18,7 @@ class client(object):
         self.args.extend(["--clientid", "kkkkkkkkkk0{}".format(str(client_port))])
         self.args.extend(["--server_port", server_port])
         self.args.extend(["--client_port", str(client_port)])
-        self.args.extend(["--qos", "1"])
+        self.args.extend(["--qos", "0"])
         self.args.extend(["--rate", str(rate)])
         self.args.extend(["--pubnum", str(pubnum)])
         if (client_port % 2 == 1):
